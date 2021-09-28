@@ -2,13 +2,10 @@ import numpy as np
 import pandas as pd
 import sys
 from os import listdir
-import xlrd
 import configparser
-from openpyxl import load_workbook
 
 
-
-class base():
+class BaseParser():
 
     def __init__(self, input_file, first_row, output_column_names):
         self.input_file = input_file
@@ -50,6 +47,7 @@ class base():
             return ""
 
     def _get_risk_class(self, string):
+
         if "UPNT" in string:
             return "UPNT"
         elif "SPNT" in string:
@@ -76,12 +74,13 @@ class base():
 
         if "NT" in string :
             return "NT"
-        elif 'SPT' in string or 'TOB' in string:
+        elif 'SPT' in string or 'TOB' in string or 'T' in string:
             return 'T'
         else:
             sys.exit("get_risk_subclass_2 : Please check the sheet name of input file. Program Terminated with value: " + string)
 
-class dividendParser(base):
+
+class DividendParser(BaseParser):
 
     FIRST_ROW_DEFAULT = 6
     SHEET_NAME_DEFAULT = '^Dividends_v7_2021_test'
@@ -89,13 +88,13 @@ class dividendParser(base):
                    [ 'Dur.' + str(i) for i in range(0,122)]
 
     def __init__(self, input_file, first_row = FIRST_ROW_DEFAULT, output_column_names = COLUMN_NAMES_DEFAULT):
+
         self.input_file = input_file
         self.first_row = first_row
         self.output_column_names = output_column_names
 
-
-
     def _get_risk_class(self, string):
+
         if "UPNT" in string:
             return "UPNT"
         elif "SPNT" in string:
@@ -168,20 +167,125 @@ class dividendParser(base):
         return output
 
 
+class CurrPremPerkParser(BaseParser):
 
+    # Input file sheet names
+    # LP10 HECV:  Prem Male, Prem Female, Prem Unisex
+    # LP15 20 65: Prem Male Band 2 3 4 5, Prem Female Band 2 3 4 5, Prem Unisex Band 2 3 4 5
+    # LP100:      Prem Male Band 1 2 3 4 5, Prem Female Band 1 2 3 4 5, Prem Unisex Band 1 2 3 4 5
+    # Sub Classes: Sub_Classified_Prem_Male_NT, Sub_Classified_Prem_Male_TOB, Sub_Classified_Prem_Female_NT,
+    #              Sub_Classified_Prem_Female_TOB, Sub_Classified_Prem_Unisex_NT, Sub_Classified_Prem_Unisex_TOB
 
-class currPremPerkParser(base):
     FIRST_ROW_DEFAULT = 4
+    FIRST_ROW_SUB_DEFAULT = 4
     SHEET_NAME_DEFAULT = '^CurrPremPerK_v7_2021_test'
+    COLUMN_NAMES_DEFAULT = ['Product', 'Gender', 'Band', 'Class', 'Table Rating', 'Issue Age', 'PA_KEY', 'CODE', 'Premium_Rate']
+    RISK_CLASS_DICT = {'1': 'UPNT', '2': 'SPNT', '3': 'NT', '4': 'ST', '5': 'T'}
+    RISK_CLASS_1_DICT = {'1':'UP', '2':'SP', '3':'', '4':'SP', '5':''}
+    RISK_CLASS_2_DICT = {'1':'NT', '2':'NT', '3':'NT', '4':'T', '5':'T'}
+    TABLE_RATINGS = ["A", "B", "C", "D", "E", "F", "H", "J", "L", "P"]
 
+    def __init__(self, input_file, first_row=FIRST_ROW_DEFAULT, output_column_names=COLUMN_NAMES_DEFAULT):
+
+        self.input_file = input_file
+        self.first_row = first_row
+        self.output_column_names = output_column_names
 
     def parse(self):
+
         output = pd.DataFrame([])
         xl = pd.ExcelFile(self.input_file)
-        for sheet in xl.sheet_names:
-            df = xl.parse(sheet_name = sheet, skiprows = self.first_row - 1, encoding='utf8')
-            # Parse info based on sheet name
+        prem_sheet_list = [s for s in xl.sheet_names if 'Prem' == s[:4]]
+        prem_sub_classified_sheet_list = [s for s in xl.sheet_names if 'Sub' == s[:3]]
+
+        for sheet in prem_sheet_list:
+            df = xl.parse(sheet_name=sheet, skiprows=self.FIRST_ROW_DEFAULT - 1, encoding='utf8')
+            gender_and_risk_class = df.columns[1:6].tolist()
+            df = pd.melt(df, id_vars=["Age"], value_vars=gender_and_risk_class)
+            risk_class_info = df["variable"].str.split(pat=r'([A-Za-z]+)', expand=True).iloc[:, 1:3]
             info = sheet.split(' ')
+            df['Gender'] = self._get_gender(info[1])
+            df['Band'] = 'B' + info[-1] if 'Band' in sheet else ''
+            df['Class'] = risk_class_info[2]
+            df['risk_class_in_key_1'] = risk_class_info[2]
+            df['risk_class_in_key_2'] = risk_class_info[2]
+            df["Table Rating"] = "-"
+            output = pd.concat([output, df])
+        output['Product'] = self._get_product(self.input_file)
+        output = output.replace({"Class": self.RISK_CLASS_DICT, "risk_class_in_key_1": self.RISK_CLASS_1_DICT, "risk_class_in_key_2": self.RISK_CLASS_2_DICT})
+        output["PA_Key"] = "CP" + output["Product"] + "A," + output["Gender"] + "," + output["Band"] + "," + output[
+            "risk_class_in_key_1"] + "," + output["risk_class_in_key_2"] + "," + output["Age"].astype(str)
+        output["Code"] = output["Product"] + "," + output["Gender"] + "," + output["Band"] + "," + output[
+            "Class"] + "," + output["Table Rating"] + "," + output["Age"].astype(str)
+        output = output.rename(columns={"value": "Premium_Rate", "Age": "Issue Age"})
+        output = output.drop(columns=["risk_class_in_key_1", "risk_class_in_key_1", "variable"])
+
+        # Sub risk classes
+        output_sub = pd.DataFrame([])
+        for sheet in prem_sub_classified_sheet_list:
+            df = xl.parse(sheet_name=sheet, skiprows=self.FIRST_ROW_SUB_DEFAULT - 1, encoding='utf8')
+            df = pd.melt(df, id_vars=["Age"], value_vars=self.TABLE_RATINGS)
+            df['Gender'] = self._get_gender(sheet)
+            df['Class'] = self._get_risk_class(sheet)
+            df['Band'] = ''
+            output_sub = pd.concat([output_sub, df])
+        output_sub['Product'] = self._get_product(self.input_file)
+        output_sub = output_sub.rename(
+            columns={"variable": "Table Rating", "value": "Premium_Rate", "Age": "Issue Age"})
+        output_sub["PA_Key"] = "CP" + output_sub["Product"] + "A," + output_sub["Gender"] + "," + output_sub["Class"] + "," + output_sub[
+            "Table Rating"] + "," + output_sub["Issue Age"].astype(str)
+        output_sub["Code"] = output_sub["Product"] + "," + output_sub["Gender"] + "," + output_sub["Band"] + "," + output_sub[
+            "Class"] + "," + output_sub["Table Rating"] + "," + output_sub["Issue Age"].astype(str)
+
+        output_sub = output_sub.reset_index(drop=True)
+        output = pd.concat([output, output_sub])
+
+        output = output.reset_index(drop=True)
+        return output
+
+
+class WaiverPerkParser(BaseParser):
+    def __init__(self):
+        pass
+
+
+class NSPParser(BaseParser):
+    def __init__(self):
+        pass
+
+
+class BOYStateReserveParser(BaseParser):
+    def __init__(self):
+        pass
+
+
+class CashValuePerKParser(BaseParser):
+    def __init__(self):
+        pass
+
+def parser_factory(parserType):
+
+    parsers = {
+        'Dividend': DividendParser,
+        'CurrentPrem': CurrPremPerkParser,
+        'Waiver': WaiverPerkParser,
+        'NSP': NSPParser,
+        'BOYStateReserve': BOYStateReserveParser,
+        'CashValue': CashValuePerKParser
+    }
+
+    return parsers[parserType]()
+
+
+def validation(srcFile, destnFile):
+    df_src = pd.read_csv(srcFile).fillna(0)
+    df_destn = pd.read_csv(destnFile).fillna(0)
+    df_diff = df_src - df_destn
+    return(df_diff == 0).any().any()
+
+
+
+
 
 def main():
 
@@ -203,16 +307,33 @@ def main():
     df_output = pd.DataFrame([])
     input_file_list = listdir(input_dir_dividend_file)
 
-
-
     for eachFile in input_file_list:
-        parser = dividendParser(input_file = input_dir_dividend_file+'\\'+eachFile)
+        parser = DividendParser(input_file = input_dir_dividend_file+'\\'+eachFile)
         df_output = pd.concat([df_output, parser.parse()])
 
     df_output = df_output.reset_index(drop=True)
 
     with pd.ExcelWriter(output_file, mode='a', engine='openpyxl') as writer:
-        df_output.to_excel(writer, sheet_name=dividendParser.SHEET_NAME_DEFAULT)
+        df_output.to_excel(writer, sheet_name=DividendParser.SHEET_NAME_DEFAULT)
+
+    ##############################################################
+    ####    ^CurrPremPerK, ^CashValuePerK, ^WaiverPerK, ^NSP  ####
+    ##############################################################
+
+    input_dir_rate_file = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Rate Files'
+    output_file = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\CurrPremPerK.xlsx'
+
+    df_output = pd.DataFrame([])
+    input_file_list = listdir(input_dir_rate_file)
+
+    for eachFile in input_file_list:
+        parser = CurrPremPerkParser(input_file=input_dir_rate_file+'\\'+eachFile)
+        df_output = pd.concat([df_output, parser.parse()])
+
+    df_output = df_output.reset_index(drop=True)
+
+    with pd.ExcelWriter(output_file, mode='a', engine='openpyxl') as writer:
+        df_output.to_excel(writer, sheet_name=CurrPremPerkParser.SHEET_NAME_DEFAULT)
 
 if __name__ == '__main__':
     main()
