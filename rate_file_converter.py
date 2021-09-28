@@ -3,6 +3,9 @@ import pandas as pd
 import sys
 from os import listdir
 import configparser
+from time import sleep
+from tqdm import tqdm
+# from progress.spinner import MoonSpinner
 
 
 class BaseParser():
@@ -79,11 +82,17 @@ class BaseParser():
         else:
             sys.exit("get_risk_subclass_2 : Please check the sheet name of input file. Program Terminated with value: " + string)
 
+    def set_input_file(self, input_file):
+        self.input_file = input_file
+
+    def set_product_name(self, product_name):
+        self.product_name = product_name
+
 
 class DividendParser(BaseParser):
 
     FIRST_ROW_DEFAULT = 6
-    SHEET_NAME_DEFAULT = '^Dividends_v7_2021_test'
+    SHEET_NAME_DEFAULT = '^Dividends_v7_2021_Final'
     COLUMN_NAMES_DEFAULT = ['Product', 'Base/PUA/RPU', 'Gender', 'Market', 'Underwriting Class', 'Band', 'Iss. Age', 'PA_KEY', 'CODE'] +\
                    [ 'Dur.' + str(i) for i in range(0,122)]
 
@@ -152,6 +161,26 @@ class DividendParser(BaseParser):
             output = pd.concat([output, df])
 
         output['Product'] = self._get_product(self.input_file)
+
+        # Add rate for ALIR PUA and set the value equal to PUA
+        df_alirpua = output[output['Base/PUA/RPU'] == 'PUA'].copy()
+        df_alirpua['Base/PUA/RPU'] = 'ALIR PUA'
+        output = pd.concat([output, df_alirpua])
+
+        # Add rate for Qualified and set the value equal to None Qualified for ALIR, ALIR PUA, PUA, and LISA
+        df_qualified = output[output['Base/PUA/RPU'].isin(['ALIR', 'ALIR PUA', 'PUA', 'LISR']) & (output['Gender'] == 'U')].copy()
+        df_qualified['Market Type'] = 'Q'
+        output = pd.concat([output, df_qualified])
+
+        # Reset index before dropping
+        output = output.reset_index(drop=True)
+
+        # Drop Qualified and Age < 17
+        output.drop(output[(output['Market Type'] == 'Q') & (output['Age'] < 17)].index, inplace=True)
+
+        # Drop risk class (T, ST) and Age < 15
+        output.drop(output[output['Underwriting Class'].isin( ['T', 'ST']) & (output['Age'] < 15)].index, inplace=True)
+
         # Build PA_KEY
         output['PA_KEY'] = "CP" + output['Product'] + 'A,' + output['Base/PUA/RPU'] + ',' + output['Gender'] + ',' + output['Market_in_key'] + ',' + \
                             output['risk_class_in_key_1'] + ',' + output['risk_class_in_key_2'] + ',' + output['Band'] + ',' + output['Age'].astype(str)
@@ -164,6 +193,7 @@ class DividendParser(BaseParser):
         output = output[['Product', 'Base/PUA/RPU', 'Gender', 'Market', 'Underwriting Class', 'Band', 'Age', 'PA_KEY', 'CODE', 'Dur.0'] + [str(i) for i in range(1,122)]]
         # Rename the column
         output.columns = self.output_column_names
+
         return output
 
 
@@ -178,7 +208,7 @@ class CurrPremPerkParser(BaseParser):
 
     FIRST_ROW_DEFAULT = 4
     FIRST_ROW_SUB_DEFAULT = 4
-    SHEET_NAME_DEFAULT = '^CurrPremPerK_v7_2021_test'
+    SHEET_NAME_DEFAULT = '^CurrPremPerK_v7_2021_Final'
     COLUMN_NAMES_DEFAULT = ['Product', 'Gender', 'Band', 'Class', 'Table Rating', 'Issue Age', 'PA_KEY', 'CODE', 'Premium_Rate']
     RISK_CLASS_DICT = {'1': 'UPNT', '2': 'SPNT', '3': 'NT', '4': 'ST', '5': 'T'}
     RISK_CLASS_1_DICT = {'1':'UP', '2':'SP', '3':'', '4':'SP', '5':''}
@@ -294,21 +324,29 @@ def main():
     config.read('config.txt')
 
     app_args = dict()
-    input_dir_rate_file = ''
+    io_dic = config['io']
+    dividends_dic = config['div']
+    currPremPerK_dic = config['currPrem']
 
+    input_dir_dividend = io_dic['input_dir_dividend']
+    output_file_dividend = io_dic['output_file_dividend']
 
+    if len(sys.argv) >= 2:
+        parser = parser_factory(sys.argv[1])
+        parser.set_input_file()
     ##############################
     ####    ^Dividends    ####
     ##############################
 
-    input_dir_dividend_file = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Dividend Test'
-    output_file = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Dividends_v7_2021 9.23.21.xlsx'
+
+    input_dir_dividend = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Dividend Rate File 9.20.2021'
+    output_file = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Dividends_v7_2021 9.28.21.xlsx'
 
     df_output = pd.DataFrame([])
-    input_file_list = listdir(input_dir_dividend_file)
+    input_file_list = listdir(input_dir_dividend)
 
     for eachFile in input_file_list:
-        parser = DividendParser(input_file = input_dir_dividend_file+'\\'+eachFile)
+        parser = DividendParser(input_file = input_dir_dividend+'\\'+eachFile)
         df_output = pd.concat([df_output, parser.parse()])
 
     df_output = df_output.reset_index(drop=True)
@@ -319,21 +357,21 @@ def main():
     ##############################################################
     ####    ^CurrPremPerK, ^CashValuePerK, ^WaiverPerK, ^NSP  ####
     ##############################################################
-
-    input_dir_rate_file = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Rate Files'
-    output_file = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\CurrPremPerK.xlsx'
-
-    df_output = pd.DataFrame([])
-    input_file_list = listdir(input_dir_rate_file)
-
-    for eachFile in input_file_list:
-        parser = CurrPremPerkParser(input_file=input_dir_rate_file+'\\'+eachFile)
-        df_output = pd.concat([df_output, parser.parse()])
-
-    df_output = df_output.reset_index(drop=True)
-
-    with pd.ExcelWriter(output_file, mode='a', engine='openpyxl') as writer:
-        df_output.to_excel(writer, sheet_name=CurrPremPerkParser.SHEET_NAME_DEFAULT)
+    #
+    # input_dir_rate_file = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Rate Files'
+    # output_file = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\CurrPremPerK.xlsx'
+    #
+    # df_output = pd.DataFrame([])
+    # input_file_list = listdir(input_dir_rate_file)
+    #
+    # for eachFile in input_file_list:
+    #     parser = CurrPremPerkParser(input_file=input_dir_rate_file+'\\'+eachFile)
+    #     df_output = pd.concat([df_output, parser.parse()])
+    #
+    # df_output = df_output.reset_index(drop=True)
+    #
+    # with pd.ExcelWriter(output_file, mode='a', engine='openpyxl') as writer:
+    #     df_output.to_excel(writer, sheet_name=CurrPremPerkParser.SHEET_NAME_DEFAULT)
 
 if __name__ == '__main__':
     main()
