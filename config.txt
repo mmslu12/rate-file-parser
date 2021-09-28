@@ -1,0 +1,34 @@
+[io]
+
+input_dir_dividend = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Dividend Test'
+
+output_file_dividend = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Dividends_v7_2021 9.23.21.xlsx'
+
+input_dir_rate = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Rate Files'
+
+output_file_rate = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\CurrPremPerK.xlsx'
+
+[div]
+
+LP10.div_first_row = 6
+LP15.div_first_row = 6
+LP20.div_first_row = 6
+LP65.div_first_row = 6
+HECV.div_first_row = 6
+L100.div_first_row = 6
+
+[currPrem]
+
+LP10.currPrem_first_row = 6
+LP10.currPrem_sub_first_row = 4
+LP15.currPrem_first_row = 4
+LP15.currPrem_sub_first_row = 4
+LP20.currPrem_first_row = 4
+LP20.currPrem_sub_first_row = 4
+LP65.currPrem_first_row = 4
+LP65.currPrem_sub_first_row = 4
+HECV.currPrem_first_row = 4
+HECV.currPrem_sub_first_row = 4
+L100.currPrem_first_row = 6
+L100.currPrem_sub_first_row = 4
+
