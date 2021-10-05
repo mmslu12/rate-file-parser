@@ -2,17 +2,27 @@ import pandas as pd
 import sys
 from os import listdir
 import configparser
-import parser_factory
+
 
 class BaseParser():
+    """
+    Base parser class
+    """
 
     def __init__(self, input_file, product_name, first_row):
+        """
+        :param input_file: Source file directory
+        :param product_name: Product name (L10, L15, L20, L65, L85, L100)
+        :param first_row: First row with data including headers
+        """
         self.input_file = input_file
         self.first_row = first_row
         self.product_name = product_name
 
-
-    def _get_gender(self,string):
+    def _get_gender(self, string):
+        """
+        Utility method to get gender based on input string
+        """
 
         gender_list = {
             'Male': 'M',
@@ -29,8 +39,10 @@ class BaseParser():
         raise ValueError(
             "get_gender: Please check the sheet name of input file. Program Terminated with value: " + string)
 
-
     def _get_risk_class(self, string):
+        """
+        Utility method to get risk class based on input string
+        """
 
         class_list = {
             'UPNT': 'UPNT',
@@ -48,8 +60,10 @@ class BaseParser():
         raise ValueError(
             "get_risk_class: Please check the sheet name of input file. Program Terminated with value: " + string)
 
-
     def _get_risk_subclass_1(self, string):
+        """
+        Utility class to get risk subclass used for PA_Key
+        """
 
         if 'SP' in string:
             return 'SP'
@@ -58,44 +72,66 @@ class BaseParser():
         else:
             return ''
 
-
     def _get_risk_subclass_2(self, string):
+        """
+        Utility class to get risk subclass used for PA_Key
+        """
 
-        if 'NT' in string :
+        if 'NT' in string:
             return 'NT'
         elif 'SPT' in string or 'TOB' in string or 'T' in string:
             return 'T'
         else:
-            raise ValueError("get_risk_subclass_2 : Please check the sheet name of input file. Program Terminated with value: " + string)
-
+            raise ValueError(
+                "get_risk_subclass_2 : Please check the sheet name of input file. Program Terminated with value: " + string)
 
     def set_input_file(self, input_file):
+        """
+        Setter method for input_file
+        """
         self.input_file = input_file
 
     def set_product_name(self, product_name):
+        """
+        Setter method for product_name
+        """
         self.product_name = product_name
 
     def set_first_row(self, first_row):
+        """
+        Setter method for first_row
+        """
         self.first_row = first_row
 
     def set_output_column_names(self, output_column_names):
+        """
+        Setter method for output_column_names
+        """
         self.output_column_names = output_column_names
 
+
 class DividendParser(BaseParser):
-
+    """
+    Dividend parser class
+    """
+    # Default value for first_row
     FIRST_ROW_DEFAULT = 6
-    SHEET_NAME_DEFAULT = '^Dividends_v7_2021_Final'
-    COLUMN_NAMES_DEFAULT = ['Product', 'Base/PUA/RPU', 'Gender', 'Market', 'Underwriting Class', 'Band', 'Iss. Age', 'PA_KEY', 'CODE'] +\
-                   [ 'Dur.' + str(i) for i in range(0,122)]
+    # Default value for output column names
+    COLUMN_NAMES_DEFAULT = ['Product', 'Base/PUA/RPU', 'Gender', 'Market', 'Underwriting Class', 'Band', 'Iss. Age',
+                            'PA_KEY', 'CODE'] + \
+                           ['Dur.' + str(i) for i in range(0, 122)]
 
-    def __init__(self, input_file, product_name, first_row = FIRST_ROW_DEFAULT):
+    def __init__(self, input_file, product_name, first_row=FIRST_ROW_DEFAULT):
 
         self.input_file = input_file
         self.first_row = first_row
         self.product_name = product_name
 
-
     def _get_risk_class(self, string):
+        """
+        Utility method to get risk class
+        SPT and TOB are different from base parser
+        """
 
         class_list = {
             'UPNT': 'UPNT',
@@ -115,14 +151,19 @@ class DividendParser(BaseParser):
             "get_risk_class: Please check the sheet name of input file. Program Terminated with value: " + string)
 
     def _get_dividend_market(self, string):
+        """
+        Utility method to get dividend market
+        """
 
         if 'Qual' in string:
             return 'Q'
         else:
             return 'NQ'
 
-
     def _get_dividend_type(self, string):
+        """
+        Utility method to get dividend type
+        """
 
         type_list = {
             'DIV': 'Base',
@@ -142,11 +183,16 @@ class DividendParser(BaseParser):
             "get_dividend_type: Please check the sheet name of input file. Program Terminated with value: " + string)
 
     def parse(self):
+        """
+        Parse method
+        :return: Data frame
+        """
 
+        # Output data frame
         output = pd.DataFrame([])
         xl = pd.ExcelFile(self.input_file)
         for sheet in xl.sheet_names:
-            df = xl.parse(sheet_name = sheet, skiprows = self.first_row - 1, encoding='utf8')
+            df = xl.parse(sheet_name=sheet, skiprows=self.first_row - 1, encoding='utf8')
             # Parse info based on sheet name
             info = sheet.split(' ')
 
@@ -166,10 +212,11 @@ class DividendParser(BaseParser):
         # Add rate for ALIR PUA and set the value equal to PUA
         df_alirpua = output[output['Base/PUA/RPU'] == 'PUA'].copy()
         df_alirpua['Base/PUA/RPU'] = 'ALIR PUA'
-        output = pd.concat([output, df_alirpua])
+        output = pd.concat([output, df_alirpua], sort=False)
 
-        # Add rate for Qualified and set the value equal to None Qualified for ALIR, ALIR PUA, PUA, and LISA
-        df_qualified = output[output['Base/PUA/RPU'].isin(['ALIR', 'ALIR PUA', 'PUA', 'LISR']) & (output['Gender'] == 'U')].copy()
+        # Add rate for Qualified and set the value equal to None Qualified for ALIR, ALIR PUA, PUA, and LISR
+        df_qualified = output[
+            output['Base/PUA/RPU'].isin(['ALIR', 'ALIR PUA', 'PUA', 'LISR']) & (output['Gender'] == 'U')].copy()
         df_qualified['Market Type'] = 'Q'
         output = pd.concat([output, df_qualified], sort=False)
 
@@ -180,18 +227,23 @@ class DividendParser(BaseParser):
         output.drop(output[(output['Market Type'] == 'Q') & (output['Age'] < 17)].index, inplace=True)
 
         # Drop risk class (T, ST) and Age < 15
-        output.drop(output[output['Underwriting Class'].isin( ['T', 'ST']) & (output['Age'] < 15)].index, inplace=True)
+        output.drop(output[output['Underwriting Class'].isin(['T', 'ST']) & (output['Age'] < 15)].index, inplace=True)
 
         # Build PA_KEY
-        output['PA_KEY'] = 'CP' + output['Product'] + 'A,' + output['Base/PUA/RPU'] + ',' + output['Gender'] + ',' + output['Market_in_key'] + ',' + \
-                            output['risk_class_in_key_1'] + ',' + output['risk_class_in_key_2'] + ',' + output['Band'] + ',' + output['Age'].astype(str)
+        output['PA_KEY'] = 'CP' + output['Product'] + 'A,' + output['Base/PUA/RPU'] + ',' + output['Gender'] + ',' + \
+                           output['Market_in_key'] + ',' + \
+                           output['risk_class_in_key_1'] + ',' + output['risk_class_in_key_2'] + ',' + output[
+                               'Band'] + ',' + output['Age'].astype(str)
         # Build CODE
-        output['CODE'] = output['Product'] + ',' + output['Base/PUA/RPU'] + ',' + output['Gender'] + ',' + output['Market'] + ',' + \
-                            output['Underwriting Class'] + ',' + output['Band'] + ',' + output['Age'].astype(str)
+        output['CODE'] = output['Product'] + ',' + output['Base/PUA/RPU'] + ',' + output['Gender'] + ',' + output[
+            'Market'] + ',' + \
+                         output['Underwriting Class'] + ',' + output['Band'] + ',' + output['Age'].astype(str)
         output['Dur.0'] = 0
         output.columns = output.columns.astype(str)
         # Rearrange the column
-        output = output[['Product', 'Base/PUA/RPU', 'Gender', 'Market', 'Underwriting Class', 'Band', 'Age', 'PA_KEY', 'CODE', 'Dur.0'] + [str(i) for i in range(1,122)]]
+        output = output[
+            ['Product', 'Base/PUA/RPU', 'Gender', 'Market', 'Underwriting Class', 'Band', 'Age', 'PA_KEY', 'CODE',
+             'Dur.0'] + [str(i) for i in range(1, 122)]]
         # Rename the column
         output.columns = self.COLUMN_NAMES_DEFAULT
 
@@ -199,6 +251,9 @@ class DividendParser(BaseParser):
 
 
 class CurrPremPerkParser(BaseParser):
+    """
+    CurrPremPerK parser
+    """
 
     # Input file sheet names
     # LP10 HECV:  Prem Male, Prem Female, Prem Unisex
@@ -209,8 +264,8 @@ class CurrPremPerkParser(BaseParser):
 
     FIRST_ROW_DEFAULT = 4
     FIRST_ROW_SUB_DEFAULT = 4
-    SHEET_NAME_DEFAULT = '^CurrPremPerK_v7_2021_Final'
-    COLUMN_NAMES_DEFAULT = ['Product', 'Gender', 'Band', 'Class', 'Table Rating', 'Issue Age', 'PA_Key', 'Code', 'Premium_Rate']
+    COLUMN_NAMES_DEFAULT = ['Product', 'Gender', 'Band', 'Class', 'Table Rating', 'Issue Age', 'PA_Key', 'Code',
+                            'Premium_Rate']
     RISK_CLASS_DICT = {'1': 'UPNT', '2': 'SPNT', '3': 'NT', '4': 'ST', '5': 'T'}
     RISK_CLASS_1_DICT = {'1': 'UP', '2': 'SP', '3': '', '4': 'SP', '5': ''}
     RISK_CLASS_2_DICT = {'1': 'NT', '2': 'NT', '3': 'NT', '4': 'T', '5': 'T'}
@@ -223,10 +278,17 @@ class CurrPremPerkParser(BaseParser):
         self.first_row = first_row
 
     def parse(self):
+        """
+        Parse method
+        :return: Data frame
+        """
 
+        # Output data frame
         output = pd.DataFrame([])
         xl = pd.ExcelFile(self.input_file)
+        # Find general risk classes sheets
         prem_sheet_list = [s for s in xl.sheet_names if 'Prem' == s[:4]]
+        # Find sub risk classes sheets
         prem_sub_classified_sheet_list = [s for s in xl.sheet_names if 'Sub' == s[:3]]
 
         # General risk classes
@@ -244,7 +306,8 @@ class CurrPremPerkParser(BaseParser):
             df['Table Rating'] = "-"
             output = pd.concat([output, df], sort=False)
         output['Product'] = self.product_name
-        output = output.replace({'Class': self.RISK_CLASS_DICT, 'risk_class_in_key_1': self.RISK_CLASS_1_DICT, 'risk_class_in_key_2': self.RISK_CLASS_2_DICT})
+        output = output.replace({'Class': self.RISK_CLASS_DICT, 'risk_class_in_key_1': self.RISK_CLASS_1_DICT,
+                                 'risk_class_in_key_2': self.RISK_CLASS_2_DICT})
         output['PA_Key'] = 'CP' + output['Product'] + 'A,' + output['Gender'] + "," + output['Band'] + "," + output[
             'risk_class_in_key_1'] + ',' + output['risk_class_in_key_2'] + ',' + output['Age'].astype(str)
         output['Code'] = output['Product'] + ',' + output['Gender'] + ',' + output['Band'] + ',' + output[
@@ -264,10 +327,12 @@ class CurrPremPerkParser(BaseParser):
         output_sub['Product'] = self.product_name
         output_sub = output_sub.rename(
             columns={'variable': 'Table Rating', 'value': 'Premium_Rate', 'Age': 'Issue Age'})
-        output_sub['PA_Key'] = 'CP' + output_sub['Product'] + 'A,' + output_sub['Gender'] + ',' + output_sub['Class'] + ',' + output_sub[
-            'Table Rating'] + ',' + output_sub['Issue Age'].astype(str)
-        output_sub['Code'] = output_sub['Product'] + ',' + output_sub['Gender'] + ',' + output_sub['Band'] + "," + output_sub[
-            'Class'] + ',' + output_sub['Table Rating'] + ',' + output_sub['Issue Age'].astype(str)
+        output_sub['PA_Key'] = 'CP' + output_sub['Product'] + 'A,' + output_sub['Gender'] + ',' + output_sub[
+            'Class'] + ',' + output_sub[
+                                   'Table Rating'] + ',' + output_sub['Issue Age'].astype(str)
+        output_sub['Code'] = output_sub['Product'] + ',' + output_sub['Gender'] + ',' + output_sub['Band'] + "," + \
+                             output_sub[
+                                 'Class'] + ',' + output_sub['Table Rating'] + ',' + output_sub['Issue Age'].astype(str)
 
         output_sub = output_sub.reset_index(drop=True)
         output = pd.concat([output, output_sub], sort=False)
@@ -276,31 +341,51 @@ class CurrPremPerkParser(BaseParser):
         return output
 
 
-class WaiverPerkParser(BaseParser):
+class WaiverPerKParser(BaseParser):
+    """
+    WaiverPreK parser class place holder
+    """
+
     def __init__(self):
         pass
 
 
 class NSPParser(BaseParser):
+    """
+    NSP parser class place holder
+    """
+
     def __init__(self):
         pass
 
 
 class BOYStateReserveParser(BaseParser):
+    """
+    BOYStateReserve parser class place holder
+    """
     def __init__(self):
         pass
 
 
 class CashValuePerKParser(BaseParser):
+    """
+    CashValuePerK parser class place holder
+    """
     def __init__(self):
         pass
 
+
 def parser_factory(parserType):
+    """
+    Factory function to return parser class based on input string
+    :param parserType: Parser type string
+    :return: Parser class
+    """
 
     parsers = {
         'Dividend': DividendParser,
         'CurrPremPerK': CurrPremPerkParser,
-        'Waiver': WaiverPerkParser,
+        'Waiver': WaiverPerKParser,
         'NSP': NSPParser,
         'BOYStateReserve': BOYStateReserveParser,
         'CashValue': CashValuePerKParser
@@ -310,20 +395,25 @@ def parser_factory(parserType):
 
 
 def validation(srcFile, destnFile):
-    '''
+    """
     Compare two csv files
     :param srcFile: source csv file path
     :param destnFile: destination csv file path
     :return: Ture if all matches, False otherwise
-    '''
+    """
 
     df_src = pd.read_csv(srcFile).fillna(0)
     df_destn = pd.read_csv(destnFile).fillna(0)
     df_diff = df_src - df_destn
-    return(df_diff == 0).any().any()
+    return (df_diff == 0).any().any()
 
 
 def get_product(string):
+    """
+    Get product name based on input string
+    :param string:
+    :return:
+    """
 
     product_list = {
         'LP10': 'L10',
@@ -343,6 +433,10 @@ def get_product(string):
 
 
 def main():
+    """
+    Main application function
+    :return:
+    """
 
     # Load configuration file
     config = configparser.ConfigParser()
@@ -351,8 +445,8 @@ def main():
     if len(sys.argv) >= 2:
         parser_type = sys.argv[1]
 
-    # parser_type = 'Dividend'
-    parser_type = 'CurrPremPerK'
+    parser_type = 'Dividend'
+    # parser_type = 'CurrPremPerK'
 
     # Load input and output config
     io_dic = config['IO']
@@ -361,16 +455,11 @@ def main():
 
     parser_config = config[parser_type]
 
-    ##############################
-    ####    ^Dividends    ####
-    ##############################
-
     df_output = pd.DataFrame([])
     input_file_list = listdir(input_dir)
 
     for eachFile in input_file_list:
-
-        input_file = input_dir+'\\'+eachFile
+        input_file = input_dir + '\\' + eachFile
         product_name = get_product(eachFile)
         first_row = parser_config[f"{product_name}.data_first_row"]
         # Initialize a parser
@@ -382,27 +471,10 @@ def main():
     # Reset Index
     df_output = df_output.reset_index(drop=True)
 
+    # Write data frame into excel file with proper sheet name
     with pd.ExcelWriter(output_file, mode='a', engine='openpyxl') as writer:
         df_output.to_excel(writer, sheet_name=parser_config['Output_sheet_name'], index=False, startcol=1)
 
-    ##############################################################
-    ####    ^CurrPremPerK, ^CashValuePerK, ^WaiverPerK, ^NSP  ####
-    ##############################################################
-    #
-    # input_dir_rate_file = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Rate Files'
-    # output_file = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\CurrPremPerK.xlsx'
-    #
-    # df_output = pd.DataFrame([])
-    # input_file_list = listdir(input_dir_rate_file)
-    #
-    # for eachFile in input_file_list:
-    #     parser = CurrPremPerkParser(input_file=input_dir_rate_file+'\\'+eachFile)
-    #     df_output = pd.concat([df_output, parser.parse()])
-    #
-    # df_output = df_output.reset_index(drop=True)
-    #
-    # with pd.ExcelWriter(output_file, mode='a', engine='openpyxl') as writer:
-    #     df_output.to_excel(writer, sheet_name=CurrPremPerkParser.SHEET_NAME_DEFAULT)
 
 if __name__ == '__main__':
     main()
