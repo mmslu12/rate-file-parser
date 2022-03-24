@@ -1,5 +1,6 @@
 import pandas as pd
 import sys
+import numpy as np
 from os import listdir
 import configparser
 
@@ -48,9 +49,11 @@ class BaseParser():
             'UPNT': 'UPNT',
             'SPNT': 'SPNT',
             'NT': 'NT',
-            'SPT': 'SPT',
-            'TOB': 'TOB'
+            'SPT': 'ST',
+            'TOB': 'T',
+            'T': 'T'
         }
+
         string = string.upper()
 
         for type in class_list:
@@ -127,29 +130,6 @@ class DividendParser(BaseParser):
         self.first_row = first_row
         self.product_name = product_name
 
-    def _get_risk_class(self, string):
-        """
-        Utility method to get risk class
-        SPT and TOB are different from base parser
-        """
-
-        class_list = {
-            'UPNT': 'UPNT',
-            'SPNT': 'SPNT',
-            'NT': 'NT',
-            'SPT': 'ST',
-            'TOB': 'T'
-        }
-
-        string = string.upper()
-
-        for type in class_list:
-            if type in string:
-                return class_list[type]
-
-        raise ValueError(
-            "get_risk_class: Please check the sheet name of input file. Program Terminated with value: " + string)
-
     def _get_dividend_market(self, string):
         """
         Utility method to get dividend market
@@ -181,6 +161,30 @@ class DividendParser(BaseParser):
 
         raise ValueError(
             "get_dividend_type: Please check the sheet name of input file. Program Terminated with value: " + string)
+
+    def _get_risk_class(self, string):
+        """
+        Utility method to get risk class
+        SPT and TOB are different from base parser
+        """
+
+        class_list = {
+            'UPNT': 'UPNT',
+            'SPNT': 'SPNT',
+            'NT': 'NT',
+            'SPT': 'ST',
+            'TOB': 'T'
+        }
+
+        string = string.upper()
+
+        for type in class_list:
+            if type in string:
+                return class_list[type]
+
+        raise ValueError(
+            "get_risk_class: Please check the sheet name of input file. Program Terminated with value: " + string)
+
 
     def parse(self):
         """
@@ -217,14 +221,14 @@ class DividendParser(BaseParser):
         # Add rate for Qualified and set the value equal to None Qualified for ALIR, ALIR PUA, PUA, and LISR
         df_qualified = output[
             output['Base/PUA/RPU'].isin(['ALIR', 'ALIR PUA', 'PUA', 'LISR']) & (output['Gender'] == 'U')].copy()
-        df_qualified['Market Type'] = 'Q'
+        df_qualified['Market'] = 'Q'
         output = pd.concat([output, df_qualified], sort=False)
 
         # Reset index before dropping
         output = output.reset_index(drop=True)
 
         # Drop Qualified and Age < 17
-        output.drop(output[(output['Market Type'] == 'Q') & (output['Age'] < 17)].index, inplace=True)
+        output.drop(output[(output['Market'] == 'Q') & (output['Age'] < 17)].index, inplace=True)
 
         # Drop risk class (T, ST) and Age < 15
         output.drop(output[output['Underwriting Class'].isin(['T', 'ST']) & (output['Age'] < 15)].index, inplace=True)
@@ -256,7 +260,7 @@ class CurrPremPerkParser(BaseParser):
     """
 
     # Input file sheet names
-    # LP10 HECV:  Prem Male, Prem Female, Prem Unisex
+    # LP10 HECV:  Prem Male, Prem Female, Prem Unisex (No banding)
     # LP15 20 65: Prem Male Band 2 3 4 5, Prem Female Band 2 3 4 5, Prem Unisex Band 2 3 4 5
     # LP100:      Prem Male Band 1 2 3 4 5, Prem Female Band 1 2 3 4 5, Prem Unisex Band 1 2 3 4 5
     # Sub Classes: Sub_Classified_Prem_Male_NT, Sub_Classified_Prem_Male_TOB, Sub_Classified_Prem_Female_NT,
@@ -271,7 +275,7 @@ class CurrPremPerkParser(BaseParser):
     RISK_CLASS_2_DICT = {'1': 'NT', '2': 'NT', '3': 'NT', '4': 'T', '5': 'T'}
     TABLE_RATINGS = ['A', 'B', 'C', 'D', 'E', 'F', 'H', 'J', 'L', 'P']
 
-    def __init__(self, input_file, product_name, first_row=FIRST_ROW_DEFAULT):
+    def __init__(self, input_file, product_name, first_row):
 
         self.input_file = input_file
         self.product_name = product_name
@@ -285,70 +289,193 @@ class CurrPremPerkParser(BaseParser):
 
         # Output data frame
         output = pd.DataFrame([])
+        # Read excel file into pandas data object
         xl = pd.ExcelFile(self.input_file)
         # Find general risk classes sheets
         prem_sheet_list = [s for s in xl.sheet_names if 'Prem' == s[:4]]
         # Find sub risk classes sheets
         prem_sub_classified_sheet_list = [s for s in xl.sheet_names if 'Sub' == s[:3]]
 
-        # General risk classes
+        # 1. General risk classes, worksheet name starting with Prem #
         for sheet in prem_sheet_list:
+            # Convert each worksheet into dataframe
             df = xl.parse(sheet_name=sheet, skiprows=self.first_row - 1, encoding='utf8')
+            # Get gender and risk class information from the header <Age M1	M2	M3	M4	M5	M0>
             gender_and_risk_class = df.columns[1:6].tolist()
+            # Restructure and make <M1 M2 M3 M4 M5> as dataframe value
             df = pd.melt(df, id_vars=['Age'], value_vars=gender_and_risk_class)
+            # Split M1 into gender and risk class
             risk_class_info = df['variable'].str.split(pat=r'([A-Za-z]+)', expand=True).iloc[:, 1:3]
+            # Split worksheet name
             info = sheet.split(' ')
+            # Get gender from worksheet name
             df['Gender'] = self._get_gender(info[1])
-            df['Band'] = 'B' + info[-1] if 'Band' in sheet else ''
+            # Get band from worksheet name if Band exists
+            if 'Band' in sheet:
+                df['Band'] = 'B' + info[-1]
+            # For LP10 and HECV
+            else:
+                # replicate 4 times with band 2,3,4,5
+                df_1 = pd.DataFrame([])
+                for b in range(2, 6):
+                    df['Band'] = 'B' + str(b)
+                    df_1 = pd.concat([df_1,df.copy()])
+                df = df_1
+
             df['Class'] = risk_class_info[2]
+            # UP or SP
             df['risk_class_in_key_1'] = risk_class_info[2]
+            # NT or T
             df['risk_class_in_key_2'] = risk_class_info[2]
+            # Default table rating as -
             df['Table Rating'] = "-"
+            # Concatenate to the output data frame
             output = pd.concat([output, df], sort=False)
+        # Set product name
         output['Product'] = self.product_name
+        # Map risk class to UP/SP, NT/T
         output = output.replace({'Class': self.RISK_CLASS_DICT, 'risk_class_in_key_1': self.RISK_CLASS_1_DICT,
                                  'risk_class_in_key_2': self.RISK_CLASS_2_DICT})
+        # Generate PA_Key
         output['PA_Key'] = 'CP' + output['Product'] + 'A,' + output['Gender'] + "," + output['Band'] + "," + output[
             'risk_class_in_key_1'] + ',' + output['risk_class_in_key_2'] + ',' + output['Age'].astype(str)
+        # Generate Code
         output['Code'] = output['Product'] + ',' + output['Gender'] + ',' + output['Band'] + ',' + output[
             'Class'] + ',' + output['Table Rating'] + ',' + output['Age'].astype(str)
+        # Rename columns
         output = output.rename(columns={'value': 'Premium_Rate', 'Age': 'Issue Age'})
+        # Drop extra columns
         output = output.drop(columns=['risk_class_in_key_1', 'risk_class_in_key_2', 'variable'])
+        # Reset index
+        output = output.reset_index(drop=True)
 
-        # Sub risk classes
+        # 2. Sub risk classes, worksheet name starting with Sub_Classified
         output_sub = pd.DataFrame([])
         for sheet in prem_sub_classified_sheet_list:
+            # Convert each worksheet into dataframe
             df = xl.parse(sheet_name=sheet, skiprows=self.FIRST_ROW_SUB_DEFAULT - 1, encoding='utf8')
+            # Restructure and make ['A', 'B', 'C', 'D', 'E', 'F', 'H', 'J', 'L', 'P'] as dataframe value
             df = pd.melt(df, id_vars=['Age'], value_vars=self.TABLE_RATINGS)
+            # Get gender from worksheet name
             df['Gender'] = self._get_gender(sheet)
+            # Get risk class from worksheet name
             df['Class'] = self._get_risk_class(sheet)
+            # Set default empty band
             df['Band'] = ''
+            # Concatenate to the output data frame
             output_sub = pd.concat([output_sub, df])
+        # Set product name
         output_sub['Product'] = self.product_name
+        # Rename columns
         output_sub = output_sub.rename(
             columns={'variable': 'Table Rating', 'value': 'Premium_Rate', 'Age': 'Issue Age'})
+        # Generate PA_Key
         output_sub['PA_Key'] = 'CP' + output_sub['Product'] + 'A,' + output_sub['Gender'] + ',' + output_sub[
-            'Class'] + ',' + output_sub[
-                                   'Table Rating'] + ',' + output_sub['Issue Age'].astype(str)
+            'Class'] + ',' + output_sub['Table Rating'] + ',' + output_sub['Issue Age'].astype(str)
+        # Generate Code
         output_sub['Code'] = output_sub['Product'] + ',' + output_sub['Gender'] + ',' + output_sub['Band'] + "," + \
                              output_sub[
                                  'Class'] + ',' + output_sub['Table Rating'] + ',' + output_sub['Issue Age'].astype(str)
-
+        # Reset index
         output_sub = output_sub.reset_index(drop=True)
+
+        # Concatenate to output
         output = pd.concat([output, output_sub], sort=False)
+        # Rearrange columns
         output = output[self.COLUMN_NAMES_DEFAULT]
+        # Reset index
         output = output.reset_index(drop=True)
         return output
 
 
 class WaiverPerKParser(BaseParser):
     """
-    WaiverPreK parser class place holder
+    WaiverPreK parser
     """
 
-    def __init__(self):
-        pass
+    # Input file sheet names
+    # LP10 HECV:  WP Male, WP Female, WP Unisex (No banding)
+    # LP15 20 65: WP Male Band 2 3 4 5, WP Female Band 2 3 4 5, WP Unisex Band 2 3 4 5 (No band 1)
+    # LP100:      WP Male Band 1 2 3 4 5, WP Female Band 1 2 3 4 5, WP Unisex Band 1 2 3 4 5
 
+
+    FIRST_ROW_DEFAULT = 4
+    COLUMN_NAMES_DEFAULT = ['Product', 'Gender', 'Band', 'Class', 'Issue Age', 'PA_Key', 'Code',
+                            'Premium_Rate']
+    RISK_CLASS_DICT = {'1': 'UPNT', '2': 'SPNT', '3': 'NT', '4': 'ST', '5': 'T'}
+    RISK_CLASS_1_DICT = {'1': 'UP', '2': 'SP', '3': '', '4': 'SP', '5': ''}
+    RISK_CLASS_2_DICT = {'1': 'NT', '2': 'NT', '3': 'NT', '4': 'T', '5': 'T'}
+
+    def __init__(self, input_file, product_name, first_row):
+
+        self.input_file = input_file
+        self.product_name = product_name
+        self.first_row = first_row
+
+
+    def parse(self):
+
+        # Output data frame
+        output = pd.DataFrame([])
+        # Read excel file into pandas data object
+        xl = pd.ExcelFile(self.input_file)
+        # Find waiver worksheets, 'WP' as prefix of worksheet name
+        waiver_sheet_list = [s for s in xl.sheet_names if 'WP' == s[:2]]
+        # Loop each waiver worksheet
+        for sheet in waiver_sheet_list:
+            # Convert each worksheet into dataframe
+            df = xl.parse(sheet_name=sheet, skiprows=self.first_row - 1, encoding='utf8')
+            # Get gender and risk class information from the header <Age M1	M2	M3	M4	M5	M0>
+            gender_and_risk_class = df.columns[1:6].tolist()
+            # Restructure and make <M1 M2 M3 M4 M5> as dataframe value
+            df = pd.melt(df, id_vars=['Age'], value_vars=gender_and_risk_class)
+            # Split M1 into gender and risk class
+            risk_class_info = df['variable'].str.split(pat=r'([A-Za-z]+)', expand=True).iloc[:, 1:3]
+            # Split worksheet name
+            info = sheet.split(' ')
+            # Get gender from worksheet name
+            df['Gender'] = self._get_gender(info[1])
+            # Get band from worksheet name if Band exists
+            if 'Band' in sheet:
+                df['Band'] = 'B' + info[-1]
+            # For LP10 and HECV
+            else:
+                # replicate 4 times with band 2,3,4,5
+                df_1 = pd.DataFrame([])
+                for b in range(2, 6):
+                    df['Band'] = 'B' + str(b)
+                    df_1 = pd.concat([df_1,df.copy()])
+                df = df_1
+
+            df['Class'] = risk_class_info[2]
+            # UP or SP
+            df['risk_class_in_key_1'] = risk_class_info[2]
+            # NT or T
+            df['risk_class_in_key_2'] = risk_class_info[2]
+            # Concatenate to the output data frame
+            output = pd.concat([output, df], sort=False)
+        # Set product name
+        output['Product'] = self.product_name
+        # Map risk class to UP/SP, NT/T
+        output = output.replace({'Class': self.RISK_CLASS_DICT, 'risk_class_in_key_1': self.RISK_CLASS_1_DICT,
+                                 'risk_class_in_key_2': self.RISK_CLASS_2_DICT})
+        # Generate PA_Key
+        output['PA_Key'] = 'CP' + output['Product'] + 'A,' + output['Gender'] + "," + output['Band'] + "," + output[
+            'risk_class_in_key_1'] + ',' + output['risk_class_in_key_2'] + ',' + output['Age'].astype(str)
+
+        # Generate Code
+        output['Code'] = output['Product'] + ',' + output['Gender'] + ',' + output['Band'] + ',' + output[
+            'Class'] + ',' + output['Age'].astype(str)
+        # Rename columns
+        output = output.rename(columns={'value': 'Premium_Rate', 'Age': 'Issue Age'})
+        # Drop extra columns
+        output = output.drop(columns=['risk_class_in_key_1', 'risk_class_in_key_2', 'variable'])
+        # Rearrange columns
+        output = output[self.COLUMN_NAMES_DEFAULT]
+        # Reset index
+        output = output.reset_index(drop=True)
+
+        return output
 
 class NSPParser(BaseParser):
     """
@@ -371,9 +498,96 @@ class CashValuePerKParser(BaseParser):
     """
     CashValuePerK parser class place holder
     """
-    def __init__(self):
-        pass
 
+
+    # Input file sheet names
+    # LP10:   GCV (BOY) Male, GCV (BOY) Female, GCV (BOY) Unisex
+    # LP15 20 65 100: Male CV(BOY), Female CV(BOY), Unisex CV(BOY)
+    # HECV:       Male UPNT CV (BOY), Male SPNT CV (BOY), Male NT CV (BOY), Male SPT CV (BOY), Male SPT CV (BOY)
+    #           , Female UPNT CV (BOY), Female SPNT CV (BOY), Female NT CV (BOY), Female SPT CV (BOY), Female TOB CV (BOY)
+    #           , Unisex UPNT CV (BOY), Unisex SPNT CV (BOY), Unisex NT CV (BOY), Unisex SPT CV (BOY), Unisex TOB CV (BOY)
+
+    COLUMN_NAMES_DEFAULT = ['Product', 'Gender', 'Class', 'Iss. Age', 'PA_Key', 'CODE'] + [
+                            'Dur.' + str(i) for i in range(0, 122)]
+    def __init__(self, input_file, product_name, first_row):
+
+        self.input_file = input_file
+        self.product_name = product_name
+        self.first_row = first_row
+    def _get_risk_class(self, string):
+        """
+        Utility method to get risk class
+        SPT and TOB are different from base parser
+        """
+
+        class_list = {
+            'UPNT': 'UPNT',
+            'SPNT': 'SPNT',
+            'NT': 'NT',
+            'SPT': 'SPT',
+            'TOB': 'TOB'
+        }
+
+        string = string.upper()
+
+        for type in class_list:
+            if type in string:
+                return class_list[type]
+
+        raise ValueError(
+            "get_risk_class: Please check the sheet name of input file. Program Terminated with value: " + string)
+
+    def parse(self):
+
+        # Output data frame
+        output = pd.DataFrame([])
+        # Read excel file into pandas data object
+        xl = pd.ExcelFile(self.input_file)
+        # Find cash value worksheets, worksheet name contains CV (BOY) or CV(BOY)
+        cash_value_sheet_list = [s for s in xl.sheet_names if 'CV (BOY)' in s or 'CV(BOY)' in s]
+        # Loop each cash value worksheet
+        for sheet in cash_value_sheet_list:
+            # Convert each worksheet into dataframe
+            df = xl.parse(sheet_name=sheet, skiprows=self.first_row - 1, encoding='utf8')
+            # Get gender from worksheet name
+            df['Gender'] = self._get_gender(sheet)
+            # Get risk class for L85 only
+            if self.product_name == 'L85':
+                df['Class'] = self._get_risk_class(sheet)
+            else:
+                df['Class'] = ''
+            # Concatenate to the output data frame
+            output = pd.concat([output, df], sort=False)
+        # Set product name
+        output['Product'] = self.product_name
+        # Add column 122 for L10 only
+        if self.product_name == 'L10':
+            output['122'] = 0
+            # Set 1000 for Age 0 duration 122
+            output.loc[(output.Age == 0), '122'] = 1000.00
+
+        # Generate PA_Key
+        output['PA_Key'] = 'CP' + output['Product'] + 'A,' + output['Gender'] + ',' + output['Class'] + ',' + output[
+            'Age'].astype(str)
+        # Generate Code
+        output['Code'] = output['Product'] + ',' + output['Gender'] + ',' + output[
+            'Class'] + ',' + output['Age'].astype(str)
+
+        # Convert column names into string for the further selection
+        output.columns = output.columns.astype(str)
+        # Rearrange columns
+        # L10 has different header for rates from 1 to 122
+        if self.product_name == 'L10':
+            output = output[['Product', 'Gender', 'Class', 'Age', 'PA_Key', 'Code'] + [str(i) for i in range(1, 123)]]
+        # Rest of product's header for rates are from 0 to 121
+        else:
+            output = output[['Product', 'Gender', 'Class', 'Age', 'PA_Key', 'Code'] + [str(i) for i in range(0, 122)]]
+        # Rename column name
+        output.columns = self.COLUMN_NAMES_DEFAULT
+        # Reset index
+        output = output.reset_index(drop=True)
+
+        return output
 
 def parser_factory(parserType):
     """
@@ -385,10 +599,10 @@ def parser_factory(parserType):
     parsers = {
         'Dividend': DividendParser,
         'CurrPremPerK': CurrPremPerkParser,
-        'Waiver': WaiverPerKParser,
+        'WaiverPerK': WaiverPerKParser,
         'NSP': NSPParser,
         'BOYStateReserve': BOYStateReserveParser,
-        'CashValue': CashValuePerKParser
+        'CashValuePerK': CashValuePerKParser
     }
 
     return parsers[parserType]
@@ -445,8 +659,11 @@ def main():
     if len(sys.argv) >= 2:
         parser_type = sys.argv[1]
 
-    parser_type = 'Dividend'
+    # parser_type = 'Dividend'
     # parser_type = 'CurrPremPerK'
+    # parser_type = 'WaiverPerK'
+    parser_type = 'CashValuePerK'
+
 
     # Load input and output config
     io_dic = config['IO']
@@ -475,6 +692,9 @@ def main():
     with pd.ExcelWriter(output_file, mode='a', engine='openpyxl') as writer:
         df_output.to_excel(writer, sheet_name=parser_config['Output_sheet_name'], index=False, startcol=1)
 
+    # writer = pd.ExcelWriter(output_file, mode='a', engine='openpyxl')
+    # df_output.to_excel(writer, sheet_name=parser_config['Output_sheet_name'], index=False, startcol=1)
+    # writer.save()
 
 if __name__ == '__main__':
     main()
