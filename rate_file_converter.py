@@ -480,19 +480,80 @@ class WaiverPerKParser(BaseParser):
 
 class NSPParser(BaseParser):
     """
-    NSP parser class place holder
+    NSP parser class
     """
+    # Input file worksheet names
+    # LP10 HECV:  Prem Male, Prem Female, Prem Unisex (No banding)
+    # LP15 20 65: Prem Male Band 2 3 4 5, Prem Female Band 2 3 4 5, Prem Unisex Band 2 3 4 5
+    # LP100:      Prem Male Band 1 2 3 4 5, Prem Female Band 1 2 3 4 5, Prem Unisex Band 1 2 3 4 5
+    # Sub Classes: Sub_Classified_Prem_Male_NT, Sub_Classified_Prem_Male_TOB, Sub_Classified_Prem_Female_NT,
+    #              Sub_Classified_Prem_Female_TOB, Sub_Classified_Prem_Unisex_NT, Sub_Classified_Prem_Unisex_TOB
 
-    def __init__(self):
-        pass
+
+    FIRST_ROW_DEFAULT = 4
+    COLUMN_NAMES_DEFAULT = ['Product', 'Gender', 'Band', 'Class', 'Issue Age', 'PA_Key', 'Code',
+                            'Premium_Rate']
+    RISK_CLASS_DICT = {'1': 'UPNT', '2': 'SPNT', '3': 'NT', '4': 'ST', '5': 'T'}
+    RISK_CLASS_1_DICT = {'1': 'UP', '2': 'SP', '3': '', '4': 'SP', '5': ''}
+    RISK_CLASS_2_DICT = {'1': 'NT', '2': 'NT', '3': 'NT', '4': 'T', '5': 'T'}
+
+    def __init__(self, input_file, product_name, first_row):
+
+        self.input_file = input_file
+        self.product_name = product_name
+        self.first_row = first_row
 
 
 class BOYStateReserveParser(BaseParser):
     """
-    BOYStateReserve parser class place holder
+    BOYStateReserve parser class
     """
-    def __init__(self):
-        pass
+
+    COLUMN_NAMES_DEFAULT = ['Product', 'Gender',  'Iss. Age', 'PA_Key', 'Code'] + [
+                            'Dur.' + str(i) for i in range(-1, 122)]
+
+    def __init__(self, input_file, product_name, first_row):
+
+        self.input_file = input_file
+        self.product_name = product_name
+        self.first_row = first_row
+
+
+    def parse(self):
+
+        # Output data frame
+        output = pd.DataFrame([])
+        # Read excel file into pandas data object
+        xl = pd.ExcelFile(self.input_file)
+        # Loop each reserve worksheet
+        for sheet in xl.sheet_names:
+            # Convert each worksheet into dataframe
+            df = xl.parse(sheet_name=sheet, skiprows=self.first_row - 1, encoding='utf8')
+            # Get gender from worksheet name
+            df['Gender'] = self._get_gender(sheet)
+
+            # Concatenate to the output data frame
+            output = pd.concat([output, df], sort=False)
+        # Set product name
+        output['Product'] = self.product_name
+        # Add two place holder columns
+        output['-1'] = 0
+        output['0'] = 0
+        # Generate PA_Key
+        output['PA_Key'] = 'CP' + output['Product'] + 'A,' + output['Gender'] +  ',' + output['Age'].astype(str)
+
+        # Generate Code
+        output['Code'] = output['Product'] + ',' + output['Gender'] + ',' + output['Age'].astype(str)
+        # Convert column names into string for the further selection
+        output.columns = output.columns.astype(str)
+        # Rearrange columns
+        output = output[['Product', 'Gender', 'Age', 'PA_Key', 'Code'] + [str(i) for i in range(-1, 122)]]
+        # Rename column name
+        output.columns = self.COLUMN_NAMES_DEFAULT
+        # Reset index
+        output = output.reset_index(drop=True)
+
+        return output
 
 
 class CashValuePerKParser(BaseParser):
@@ -664,12 +725,19 @@ def main():
     # parser_type = 'Dividend'
     # parser_type = 'CurrPremPerK'
     # parser_type = 'WaiverPerK'
-    parser_type = 'CashValuePerK'
+    # parser_type = 'CashValuePerK'
+    parser_type = 'BOYStateReserve'
 
 
     # Load input and output config
     io_dic = config['IO']
-    input_dir = io_dic[f"{'Dividend' if parser_type == 'Dividend' else 'Rate'}.input_dir"]
+    if parser_type == 'Dividend':
+        input_dir = io_dic['Dividend.input_dir']
+    elif parser_type == 'BOYStateReserve':
+        input_dir = io_dic['Reserve.input_dir']
+    else:
+        input_dir = io_dic['Rate.input_dir']
+
     output_file = io_dic['Output_file']
 
     parser_config = config[parser_type]
