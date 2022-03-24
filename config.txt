@@ -1,34 +1,48 @@
-[io]
+[IO]
 
-input_dir_dividend = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Dividend Test'
+Dividend.input_dir = C:\Users\mm13825\OneDrive - MassMutual\MyDocuments\Life\Mini Project\Rate File Conversion Demo\Dividend demo
 
-output_file_dividend = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Dividends_v7_2021 9.23.21.xlsx'
+Rate.input_dir = C:\Users\mm13825\OneDrive - MassMutual\MyDocuments\Life\Mini Project\Rate File Conversion Demo\Rate File demo
 
-input_dir_rate = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\Rate Files'
+Output_file = C:\Users\mm13825\OneDrive - MassMutual\MyDocuments\Life\Mini Project\Rate File Conversion Demo\CONTROL_Tables demo - new.xlsx
 
-output_file_rate = 'C:\\Users\\mm13825\\OneDrive - MassMutual\\MyDocuments\\Life\\Mini Project\\Rates Files Conversion\\CurrPremPerK.xlsx'
 
-[div]
+[CurrPremPerK]
+L10.data_first_row = 6
+L15.data_first_row = 4
+L20.data_first_row = 4
+L65.data_first_row = 4
+L85.data_first_row = 4
+L100.data_first_row = 4
+Output_sheet_name = ^CurrPremPerK_v7_2021_Final
 
-LP10.div_first_row = 6
-LP15.div_first_row = 6
-LP20.div_first_row = 6
-LP65.div_first_row = 6
-HECV.div_first_row = 6
-L100.div_first_row = 6
 
-[currPrem]
+[WaiverPerK]
+L10.data_first_row = 6
+L15.data_first_row = 4
+L20.data_first_row = 4
+L65.data_first_row = 4
+L85.data_first_row = 4
+L100.data_first_row = 4
+Output_sheet_name = ^WaiverPerK_v7_2021_Final
 
-LP10.currPrem_first_row = 6
-LP10.currPrem_sub_first_row = 4
-LP15.currPrem_first_row = 4
-LP15.currPrem_sub_first_row = 4
-LP20.currPrem_first_row = 4
-LP20.currPrem_sub_first_row = 4
-LP65.currPrem_first_row = 4
-LP65.currPrem_sub_first_row = 4
-HECV.currPrem_first_row = 4
-HECV.currPrem_sub_first_row = 4
-L100.currPrem_first_row = 6
-L100.currPrem_sub_first_row = 4
+
+[CashValuePerK]
+L10.data_first_row = 6
+L15.data_first_row = 5
+L20.data_first_row = 5
+L65.data_first_row = 5
+L85.data_first_row = 5
+L100.data_first_row = 5
+Output_sheet_name = ^CashValuePerK_v7_2021_Final
+
+[Dividend]
+L10.data_first_row = 6
+L15.data_first_row = 6
+L20.data_first_row = 6
+L65.data_first_row = 6
+L85.data_first_row = 6
+L100.data_first_row = 6
+Output_sheet_name = ^Dividends_v7_2021_Final
+
 
