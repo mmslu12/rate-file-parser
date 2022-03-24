@@ -9,6 +9,7 @@ Output_file = C:\Users\mm13825\OneDrive - MassMutual\MyDocuments\Life\Mini Proje
 
 [CurrPremPerK]
 L10.data_first_row = 6
+L12.data_first_row = 4
 L15.data_first_row = 4
 L20.data_first_row = 4
 L65.data_first_row = 4
@@ -19,6 +20,7 @@ Output_sheet_name = ^CurrPremPerK_v7_2021_Final
 
 [WaiverPerK]
 L10.data_first_row = 6
+L12.data_first_row = 4
 L15.data_first_row = 4
 L20.data_first_row = 4
 L65.data_first_row = 4
@@ -29,12 +31,14 @@ Output_sheet_name = ^WaiverPerK_v7_2021_Final
 
 [CashValuePerK]
 L10.data_first_row = 6
+L12.data_first_row = 5
 L15.data_first_row = 5
 L20.data_first_row = 5
 L65.data_first_row = 5
 L85.data_first_row = 5
 L100.data_first_row = 5
 Output_sheet_name = ^CashValuePerK_v7_2021_Final
+
 
 [Dividend]
 L10.data_first_row = 6

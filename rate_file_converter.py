@@ -117,12 +117,11 @@ class DividendParser(BaseParser):
     """
     Dividend parser class
     """
-    # Default value for first_row
+    # Default value for row number of worksheet data including headers
     FIRST_ROW_DEFAULT = 6
     # Default value for output column names
     COLUMN_NAMES_DEFAULT = ['Product', 'Base/PUA/RPU', 'Gender', 'Market', 'Underwriting Class', 'Band', 'Iss. Age',
-                            'PA_KEY', 'CODE'] + \
-                           ['Dur.' + str(i) for i in range(0, 122)]
+                            'PA_KEY', 'CODE'] + ['Dur.' + str(i) for i in range(0, 122)]
 
     def __init__(self, input_file, product_name, first_row=FIRST_ROW_DEFAULT):
 
@@ -259,12 +258,13 @@ class CurrPremPerkParser(BaseParser):
     CurrPremPerK parser
     """
 
-    # Input file sheet names
+    # Input file worksheet names
     # LP10 HECV:  Prem Male, Prem Female, Prem Unisex (No banding)
     # LP15 20 65: Prem Male Band 2 3 4 5, Prem Female Band 2 3 4 5, Prem Unisex Band 2 3 4 5
     # LP100:      Prem Male Band 1 2 3 4 5, Prem Female Band 1 2 3 4 5, Prem Unisex Band 1 2 3 4 5
     # Sub Classes: Sub_Classified_Prem_Male_NT, Sub_Classified_Prem_Male_TOB, Sub_Classified_Prem_Female_NT,
     #              Sub_Classified_Prem_Female_TOB, Sub_Classified_Prem_Unisex_NT, Sub_Classified_Prem_Unisex_TOB
+
 
     FIRST_ROW_DEFAULT = 4
     FIRST_ROW_SUB_DEFAULT = 4
@@ -393,7 +393,7 @@ class WaiverPerKParser(BaseParser):
     WaiverPreK parser
     """
 
-    # Input file sheet names
+    # Input file worksheet names
     # LP10 HECV:  WP Male, WP Female, WP Unisex (No banding)
     # LP15 20 65: WP Male Band 2 3 4 5, WP Female Band 2 3 4 5, WP Unisex Band 2 3 4 5 (No band 1)
     # LP100:      WP Male Band 1 2 3 4 5, WP Female Band 1 2 3 4 5, WP Unisex Band 1 2 3 4 5
@@ -477,6 +477,7 @@ class WaiverPerKParser(BaseParser):
 
         return output
 
+
 class NSPParser(BaseParser):
     """
     NSP parser class place holder
@@ -500,7 +501,7 @@ class CashValuePerKParser(BaseParser):
     """
 
 
-    # Input file sheet names
+    # Input file worksheet names
     # LP10:   GCV (BOY) Male, GCV (BOY) Female, GCV (BOY) Unisex
     # LP15 20 65 100: Male CV(BOY), Female CV(BOY), Unisex CV(BOY)
     # HECV:       Male UPNT CV (BOY), Male SPNT CV (BOY), Male NT CV (BOY), Male SPT CV (BOY), Male SPT CV (BOY)
@@ -577,7 +578,7 @@ class CashValuePerKParser(BaseParser):
         output.columns = output.columns.astype(str)
         # Rearrange columns
         # L10 has different header for rates from 1 to 122
-        if self.product_name == 'L10':
+        if self.product_name in ['L10', 'L12']:
             output = output[['Product', 'Gender', 'Class', 'Age', 'PA_Key', 'Code'] + [str(i) for i in range(1, 123)]]
         # Rest of product's header for rates are from 0 to 121
         else:
@@ -588,6 +589,7 @@ class CashValuePerKParser(BaseParser):
         output = output.reset_index(drop=True)
 
         return output
+
 
 def parser_factory(parserType):
     """
@@ -695,6 +697,7 @@ def main():
     # writer = pd.ExcelWriter(output_file, mode='a', engine='openpyxl')
     # df_output.to_excel(writer, sheet_name=parser_config['Output_sheet_name'], index=False, startcol=1)
     # writer.save()
+
 
 if __name__ == '__main__':
     main()
