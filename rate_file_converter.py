@@ -558,7 +558,7 @@ class BOYStateReserveParser(BaseParser):
 
 class CashValuePerKParser(BaseParser):
     """
-    CashValuePerK parser class place holder
+    CashValuePerK parser class
     """
 
 
@@ -569,13 +569,15 @@ class CashValuePerKParser(BaseParser):
     #           , Female UPNT CV (BOY), Female SPNT CV (BOY), Female NT CV (BOY), Female SPT CV (BOY), Female TOB CV (BOY)
     #           , Unisex UPNT CV (BOY), Unisex SPNT CV (BOY), Unisex NT CV (BOY), Unisex SPT CV (BOY), Unisex TOB CV (BOY)
 
-    COLUMN_NAMES_DEFAULT = ['Product', 'Gender', 'Class', 'Iss. Age', 'PA_Key', 'CODE'] + [
+    COLUMN_NAMES_DEFAULT = ['Product', 'Gender', 'Class', 'Iss. Age', 'PA_Key', 'Code'] + [
                             'Dur.' + str(i) for i in range(0, 122)]
     def __init__(self, input_file, product_name, first_row):
 
         self.input_file = input_file
         self.product_name = product_name
         self.first_row = first_row
+
+
     def _get_risk_class(self, string):
         """
         Utility method to get risk class
@@ -651,6 +653,100 @@ class CashValuePerKParser(BaseParser):
 
         return output
 
+class TAI_TRParser(BaseParser):
+    """
+    CashValuePerK parser class
+    """
+
+    COLUMN_NAMES_DEFAULT = ['PA_Key', 'Product', 'Gender', 'Smk Stat', 'Age', 'Code'] + [
+                            'Dur.' + str(i) for i in range(1, 122)]
+
+
+    def __init__(self, input_file, product_name, first_row):
+
+        self.input_file = input_file
+        self.product_name = product_name
+        self.first_row = first_row
+
+    def _get_risk_class(self, string):
+        class_list = {
+            'UPNT': 'UPNT',
+            'SPNT': 'SPNT',
+            'NT': 'NT',
+            'NS': 'NT',
+            'SPT': 'SPT',
+            'TOB': 'T',
+            'SM': 'T'
+        }
+
+        string = string.upper()
+
+        for type in class_list:
+            if type in string:
+                return class_list[type]
+
+        raise ValueError(
+            "get_risk_class: Please check the sheet name of input file. Program Terminated with value: " + string)
+
+    def _get_risk_class_1(self, string):
+        class_list = {
+            'UPNT': 'N',
+            'SPNT': 'N',
+            'NT': 'N',
+            'NS': 'N',
+            'SPT': 'S',
+            'TOB': 'S',
+            'SM': 'S'
+        }
+
+        string = string.upper()
+
+        for type in class_list:
+            if type in string:
+                return class_list[type]
+
+        raise ValueError(
+            "get_risk_class: Please check the sheet name of input file. Program Terminated with value: " + string)
+
+    def parse(self):
+
+        # Output data frame
+        output = pd.DataFrame([])
+        # Read excel file into pandas data object
+        xl = pd.ExcelFile(self.input_file)
+        # Loop each TAI_TR worksheet
+        for sheet in xl.sheet_names:
+            # Convert each worksheet into dataframe
+            df = xl.parse(sheet_name=sheet, skiprows=self.first_row - 1, encoding='utf8')
+            # Get gender from worksheet name
+            df['Gender'] = self._get_gender(sheet)
+            # Get risk class from worksheet name
+            df['Smk Stat'] = self._get_risk_class(sheet)
+            # Get risk class used for Code
+            df['Code_Class'] = self._get_risk_class_1(sheet)
+            # Concatenate to the output data frame
+            output = pd.concat([output, df], sort=False)
+        # Set product name
+        output['Product'] = self.product_name
+        # Generate PA_Key
+        output['PA_Key'] = 'CP' + output['Product'] + 'A,' + output['Gender'] + ',' + output['Smk Stat'] + ','+ output[
+            'Age'].astype(str)
+        # Generate Code
+        output["Code"] = output["Product"] + "," + output["Gender"] + "," + output["Code_Class"] + "," + output[
+        "Age"].astype(str)
+        output.columns = output.columns.astype(str)
+
+        # Convert column names into string for the further selection
+        output.columns = output.columns.astype(str)
+        # Rearrange columns
+        output = output[['PA_Key', 'Product', 'Gender', 'Smk Stat', 'Age', 'Code'] + [str(i) for i in range(1, 122)]]
+        # Rename column name
+        output.columns = self.COLUMN_NAMES_DEFAULT
+        # Reset index
+        output = output.reset_index(drop=True)
+
+        return output
+
 
 def parser_factory(parserType):
     """
@@ -665,7 +761,8 @@ def parser_factory(parserType):
         'WaiverPerK': WaiverPerKParser,
         'NSP': NSPParser,
         'BOYStateReserve': BOYStateReserveParser,
-        'CashValuePerK': CashValuePerKParser
+        'CashValuePerK': CashValuePerKParser,
+        'TAI_TR': TAI_TRParser
     }
 
     return parsers[parserType]
@@ -726,7 +823,8 @@ def main():
     # parser_type = 'CurrPremPerK'
     # parser_type = 'WaiverPerK'
     # parser_type = 'CashValuePerK'
-    parser_type = 'BOYStateReserve'
+    # parser_type = 'BOYStateReserve'
+    parser_type = 'TAI_TR'
 
 
     # Load input and output config
@@ -735,6 +833,8 @@ def main():
         input_dir = io_dic['Dividend.input_dir']
     elif parser_type == 'BOYStateReserve':
         input_dir = io_dic['Reserve.input_dir']
+    elif parser_type == 'TAI_TR':
+        input_dir = io_dic['TAI_TR.input_dir']
     else:
         input_dir = io_dic['Rate.input_dir']
 

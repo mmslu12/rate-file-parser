@@ -6,6 +6,8 @@ Rate.input_dir = C:\Users\mm13825\OneDrive - MassMutual\MyDocuments\Life\Mini Pr
 
 Reserve.input_dir = C:\Users\mm13825\OneDrive - MassMutual\MyDocuments\Life\Mini Project\Rate File Conversion Demo\Initial Reserve demo
 
+TAI_TR.input_dir = C:\Users\mm13825\OneDrive - MassMutual\MyDocuments\Life\Mini Project\Rate File Conversion Demo\TAI_TR Files demo
+
 Output_file = C:\Users\mm13825\OneDrive - MassMutual\MyDocuments\Life\Mini Project\Rate File Conversion Demo\test.xlsx
 
 
@@ -51,6 +53,18 @@ L65.data_first_row = 4
 L85.data_first_row = 4
 L100.data_first_row = 4
 Output_sheet_name = ^BOYStateReserve_v7_2021_Final
+
+
+[TAI_TR]
+L10.data_first_row = 4
+L12.data_first_row = 4
+L15.data_first_row = 4
+L20.data_first_row = 4
+L65.data_first_row = 4
+L85.data_first_row = 4
+L100.data_first_row = 4
+Output_sheet_name = ^TAI_TR_v7_2021_Final
+
 
 
 [Dividend]
